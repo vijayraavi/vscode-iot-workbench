@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import {TelemetryContext} from './telemetry';
 import {constructAndLoadIoTProject} from './utils';
 import {RemoteExtension} from './Models/RemoteExtension';
-import {CancelOperationError} from './CancelOperationError';
+import {CancelOperationError} from './common/CancelOperationError';
 
 
 export class AzureOperator {

@@ -23,8 +23,7 @@ import {RemoteExtension} from '../Models/RemoteExtension';
 import {DigitalTwinUtility} from './DigitalTwinUtility';
 import {CodeGenUtility} from './DigitalTwinCodeGen/CodeGenUtility';
 import {FileUtility} from '../FileUtility';
-import {CancelOperationError} from '../CancelOperationError';
-import {Utility} from './pnp/src/common/utility';
+import {CancelOperationError} from '../common/CancelOperationError';
 
 interface CodeGeneratorDownloadLocation {
   win32Md5: string;

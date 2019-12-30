@@ -4,7 +4,7 @@
 import * as vscode from 'vscode';
 import TelemetryReporter from 'vscode-extension-telemetry';
 
-import {CancelOperationError} from './CancelOperationError';
+import {CancelOperationError} from './common/CancelOperationError';
 import {DevelopEnvironment} from './constants';
 import {ExceptionHelper} from './exceptionHelper';
 import {RemoteExtension} from './Models/RemoteExtension';

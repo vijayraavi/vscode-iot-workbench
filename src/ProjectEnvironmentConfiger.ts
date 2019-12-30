@@ -13,7 +13,7 @@ import {RemoteExtension} from './Models/RemoteExtension';
 import {IoTWorkbenchProjectBase, OpenScenario} from './Models/IoTWorkbenchProjectBase';
 import {ProjectHostType} from './Models/Interfaces/ProjectHostType';
 import {configExternalCMakeProjectToIoTContainerProject} from './utils';
-import {CancelOperationError} from './CancelOperationError';
+import {CancelOperationError} from './common/CancelOperationError';
 
 const impor = require('impor')(__dirname);
 const ioTWorkspaceProjectModule = impor('./Models/IoTWorkspaceProject') as

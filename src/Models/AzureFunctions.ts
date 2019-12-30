@@ -25,7 +25,7 @@ import {Guid} from 'guid-typescript';
 import {AzureComponentConfig, AzureConfigs, ComponentInfo, DependencyConfig, Dependency} from './AzureComponentConfig';
 import {FileUtility} from '../FileUtility';
 import {VscodeCommands, AzureFunctionsCommands} from '../common/Commands';
-import {CancelOperationError} from '../CancelOperationError';
+import {CancelOperationError} from '../common/CancelOperationError';
 
 const impor = require('impor')(__dirname);
 const azureUtilityModule =
