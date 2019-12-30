@@ -63,15 +63,9 @@ export class CodeGeneratorCore {
   async generateDeviceCodeStub(
       context: vscode.ExtensionContext, channel: vscode.OutputChannel,
       telemetryContext: TelemetryContext) {
-    const isLocal = RemoteExtension.checkLocalBeforeRunCommand(context);
-    if (!isLocal) {
-      return;
-    }
+    RemoteExtension.ensureLocalBeforeRunCommand(context);
 
     const rootPath = utils.getFirstWorkspaceFolderPath();
-    if (!rootPath) {
-      return;
-    }
 
     // Check installation of Codegen CLI and update its bits if a new version is
     // found

@@ -13,6 +13,7 @@ import * as vscode from 'vscode';
 import * as WinReg from 'winreg';
 
 import {BoardProvider} from '../boardProvider';
+import {CancelOperationError} from '../common/CancelOperationError';
 import {ArduinoCommands} from '../common/Commands';
 import {ConfigHandler} from '../configHandler';
 import {ConfigKey, FileNames, OSPlatform, ScaffoldType} from '../constants';
@@ -47,9 +48,15 @@ const constants = {
 };
 
 enum ConfigDeviceOptions {
-  ConnectionString,
-  UDS,
-  DPS
+  ConnectionString = 'Config Connection String',
+  UDS = 'Config UDS',
+  DPS = 'Config DPS',
+  CRC = 'Config CRC'
+}
+
+enum DeviceConnectionStringAcquisitionMethods {
+  Input = 'Input IoT Hub Device Connection String',
+  Select = 'Select IoT Hub Device Connection String'
 }
 
 export class AZ3166Device extends ArduinoDeviceBase {
@@ -150,8 +157,82 @@ export class AZ3166Device extends ArduinoDeviceBase {
     return true;
   }
 
-  async configDeviceSettings(): Promise<boolean> {
-    const configSelectionItems = this.getConfigDeviceSettingsMainOptions();
+  async configDeviceSettings(): Promise<void> {
+    // Select device settings type
+    const deviceSettingType = await this.selectDeviceSettingType();
+
+    let credentials = '';
+    let deviceSettingsType = '';  // For log info
+    switch (deviceSettingType) {
+      case ConfigDeviceOptions.CRC:
+        await this.generateCrc(this.channel);
+        return;
+      case ConfigDeviceOptions.ConnectionString:
+        // Get device connection string
+        credentials = await this.getDeviceConnectionString();
+
+        deviceSettingsType = 'device connection string';
+        await this.logAndSetCredentials(
+            credentials, ConfigDeviceOptions.ConnectionString,
+            deviceSettingsType);
+        return;
+      case ConfigDeviceOptions.DPS:
+        // Get DPS Credential
+        credentials = await this.getDPSCredentialsFromInput();
+
+        deviceSettingsType = 'UPS credentials';
+        await this.logAndSetCredentials(
+            credentials, ConfigDeviceOptions.ConnectionString,
+            deviceSettingsType);
+        return;
+      case ConfigDeviceOptions.UDS:
+        // Get UDS string
+        credentials = await this.getUDSStringFromInput();
+
+        deviceSettingsType = 'Unique Device String (UDS)';
+        await this.logAndSetCredentials(
+            credentials, ConfigDeviceOptions.ConnectionString,
+            deviceSettingsType);
+        return;
+      default:
+        throw new Error(`Internal Error: Unsupported device setting type: ${
+            deviceSettingType}.`);
+    }
+  }
+
+  // Private functions for configure device settings
+
+  /**
+   * Print credentials in log. Set credentials to device.
+   * Pop up information message suggesting configuration operation is
+   * successful.
+   * @param credentials device credentials
+   * @param deviceSettingType device setting type
+   * @param deviceSettingsType device settings type info to be print in warning
+   * window
+   */
+  private async logAndSetCredentials(
+      credentials: string, deviceSettingType: ConfigDeviceOptions,
+      deviceSettingsType: string): Promise<void> {
+    // Log Credentials
+    console.log(credentials);
+
+    // Set credentials
+    const res = await this.setDeviceConfig(
+        credentials, deviceSettingType);  // TODO: Mind the return value.
+    if (!res) {
+      throw new Error('Fail to flush configuration to device');
+    }
+
+    vscode.window.showInformationMessage(
+        `Successfully configure ${deviceSettingsType}.`);
+  }
+
+  /**
+   * Select device setting type.
+   */
+  private async selectDeviceSettingType(): Promise<string|undefined> {
+    const configSelectionItems = await this.getConfigDeviceSettingTypeOptions();
     const configSelection =
         await vscode.window.showQuickPick(configSelectionItems, {
           ignoreFocusOut: true,
@@ -160,93 +241,17 @@ export class AZ3166Device extends ArduinoDeviceBase {
           placeHolder: 'Select an option',
         });
     if (!configSelection) {
-      return false;
+      throw new CancelOperationError(
+          'Config device settings option selection cancelled.');
     }
 
-    if (configSelection.detail === 'Config CRC') {
-      const retValue: boolean =
-          await this.generateCrc(this.extensionContext, this.channel);
-      return retValue;
-    } else if (configSelection.detail === 'Config Connection String') {
-      // Get IoT Hub device connection string from config
-      let deviceConnectionString =
-          ConfigHandler.get<string>(ConfigKey.iotHubDeviceConnectionString);
-      const deviceConnectionStringSelection =
-          this.getDeviceConnectionStringOptions(deviceConnectionString);
-      const selection = await vscode.window.showQuickPick(
-          deviceConnectionStringSelection,
-          {ignoreFocusOut: true, placeHolder: 'Choose an option:'});
-      if (!selection) {
-        return false;
-      }
-
-      if (selection.label === 'Input IoT Hub Device Connection String') {
-        const option = this.getInputDeviceConnectionStringOptions();
-        deviceConnectionString = await vscode.window.showInputBox(option);
-        if (!deviceConnectionString) {
-          const message =
-              'Need more information on how to get device connection string?';
-          const result: vscode.MessageItem|undefined =
-              await vscode.window.showWarningMessage(
-                  message, DialogResponses.yes, DialogResponses.no);
-          if (result === DialogResponses.yes) {
-            opn(constants.informationPageUrl);
-          }
-          return false;
-        }
-      }
-      if (!deviceConnectionString) {
-        return false;
-      }
-
-      console.log(deviceConnectionString);
-      const res = await this.setDeviceConfig(
-          deviceConnectionString, ConfigDeviceOptions.ConnectionString);
-      if (!res) {
-        return false;
-      } else {
-        vscode.window.showInformationMessage(
-            'Configure Device connection string completely.');
-        return true;
-      }
-    } else if (configSelection.detail === 'Config DPS') {
-      const option = this.getDPSConnectionStringOptions();
-      const deviceConnectionString = await vscode.window.showInputBox(option);
-      if (!deviceConnectionString) {
-        return false;
-      }
-
-      console.log(deviceConnectionString);
-      const res = await this.setDeviceConfig(
-          deviceConnectionString, ConfigDeviceOptions.DPS);
-      if (!res) {
-        return false;
-      } else {
-        vscode.window.showInformationMessage(
-            'Config DPS credentials completely.');
-        return true;
-      }
-
-    } else {
-      const option = this.getUDSStringOptions();
-      const UDS = await vscode.window.showInputBox(option);
-      if (!UDS) {
-        return false;
-      }
-
-      console.log(UDS);
-      const res = await this.setDeviceConfig(UDS, ConfigDeviceOptions.UDS);
-      if (!res) {
-        return false;
-      } else {
-        vscode.window.showInformationMessage(
-            'Configure Unique Device String (UDS) completed successfully.');
-        return true;
-      }
-    }
+    return configSelection.detail;
   }
 
-  private async getConfigDeviceSettingsMainOptions():
+  /**
+   * Get config device setting type options.
+   */
+  private async getConfigDeviceSettingTypeOptions():
       Promise<vscode.QuickPickItem[]> {
     // Read options configuration JSON
     const devciceConfigFilePath: string =
@@ -272,8 +277,57 @@ export class AZ3166Device extends ArduinoDeviceBase {
     return configSelectionItems;
   }
 
-  private getDeviceConnectionStringOptions(deviceConnectionString: string|
-                                           undefined): vscode.QuickPickItem[] {
+  /**
+   * Get device connection string.
+   * Either get from workspace config or input one.
+   */
+  private async getDeviceConnectionString(): Promise<string> {
+    // Get device connection string from workspace config
+    let deviceConnectionString =
+        ConfigHandler.get<string>(ConfigKey.iotHubDeviceConnectionString);
+
+    // Select method to acquire device connection string
+    const deviceConnectionStringAcquisitionMethodSelection =
+        await this.selectDeviceConnectionStringAcquisitionMethod(
+            deviceConnectionString);
+
+    if (deviceConnectionStringAcquisitionMethodSelection.label ===
+        DeviceConnectionStringAcquisitionMethods.Input) {
+      deviceConnectionString = await this.getInputDeviceConnectionString();
+    }
+
+    if (!deviceConnectionString) {
+      throw new Error('Fail to get device connection string.');
+    }
+
+    return deviceConnectionString;
+  }
+
+
+  /**
+   * Select method to get device connection string: input a new one or get from
+   * configuration.
+   */
+  private async selectDeviceConnectionStringAcquisitionMethod(
+      deviceConnectionString: string|undefined): Promise<vscode.QuickPickItem> {
+    const deviceConnectionStringAcquisitionOptions =
+        this.getDeviceConnectionStringAcquisitionOptions(
+            deviceConnectionString);
+    const deviceConnectionStringAcquisitionSelection =
+        await vscode.window.showQuickPick(
+            deviceConnectionStringAcquisitionOptions,
+            {ignoreFocusOut: true, placeHolder: 'Choose an option:'});
+
+    if (!deviceConnectionStringAcquisitionSelection) {
+      throw new CancelOperationError(
+          'Device connection string acquisition method selection cancelled.');
+    }
+
+    return deviceConnectionStringAcquisitionSelection;
+  }
+
+  private getDeviceConnectionStringAcquisitionOptions(
+      deviceConnectionString: string|undefined): vscode.QuickPickItem[] {
     let hostName = '';
     let deviceId = '';
     if (deviceConnectionString) {
@@ -290,28 +344,46 @@ export class AZ3166Device extends ArduinoDeviceBase {
       }
     }
 
-    let deviceConnectionStringSelection: vscode.QuickPickItem[] = [];
+    let deviceConnectionStringAcquisitionOptions: vscode.QuickPickItem[] = [];
+    const inputDeviceConnectionStringOption = {
+      label: DeviceConnectionStringAcquisitionMethods.Input,
+      description: '',
+      detail: ''
+    };
     if (deviceId && hostName) {
-      deviceConnectionStringSelection = [
+      deviceConnectionStringAcquisitionOptions = [
         {
-          label: 'Select IoT Hub Device Connection String',
+          label: DeviceConnectionStringAcquisitionMethods.Select,
           description: '',
           detail: `Device Information: ${hostName} ${deviceId}`
         },
-        {
-          label: 'Input IoT Hub Device Connection String',
-          description: '',
-          detail: ''
-        }
+        inputDeviceConnectionStringOption
       ];
     } else {
-      deviceConnectionStringSelection = [{
-        label: 'Input IoT Hub Device Connection String',
-        description: '',
-        detail: ''
-      }];
+      deviceConnectionStringAcquisitionOptions =
+          [inputDeviceConnectionStringOption];
     }
-    return deviceConnectionStringSelection;
+
+    return deviceConnectionStringAcquisitionOptions;
+  }
+
+  private async getInputDeviceConnectionString(): Promise<string> {
+    const option = this.getInputDeviceConnectionStringOptions();
+    const deviceConnectionString = await vscode.window.showInputBox(option);
+    if (!deviceConnectionString) {
+      const message =
+          'Need more information on how to get device connection string?';
+      const result: vscode.MessageItem|undefined =
+          await vscode.window.showWarningMessage(
+              message, DialogResponses.yes, DialogResponses.no);
+      if (result === DialogResponses.yes) {
+        opn(constants.informationPageUrl);
+      }
+      throw new CancelOperationError(
+          'Fail to get input device connection string.');
+    }
+
+    return deviceConnectionString;
   }
 
   private getInputDeviceConnectionStringOptions(): vscode.InputBoxOptions {
@@ -335,6 +407,18 @@ export class AZ3166Device extends ArduinoDeviceBase {
     };
 
     return option;
+  }
+
+  /**
+   * Get DPS credentials from input box.
+   */
+  private async getDPSCredentialsFromInput(): Promise<string> {
+    const option = this.getDPSConnectionStringOptions();
+    const dpsCredential = await vscode.window.showInputBox(option);
+    if (!dpsCredential) {
+      throw new CancelOperationError('DPS credentials input cancelled.');
+    }
+    return dpsCredential;
   }
 
   private getDPSConnectionStringOptions(): vscode.InputBoxOptions {
@@ -361,6 +445,19 @@ export class AZ3166Device extends ArduinoDeviceBase {
     return option;
   }
 
+  /**
+   * Get UDS string from input box.
+   */
+  private async getUDSStringFromInput(): Promise<string> {
+    const option = this.getUDSStringOptions();
+    const UDS = await vscode.window.showInputBox(option);
+    if (!UDS) {
+      throw new CancelOperationError('UDS string input cancelled.');
+    }
+
+    return UDS;
+  }
+
   private getUDSStringOptions(): vscode.InputBoxOptions {
     function generateRandomHex(): string {
       const chars = '0123456789abcdef'.split('');
@@ -385,8 +482,13 @@ export class AZ3166Device extends ArduinoDeviceBase {
     return option;
   }
 
-
-  async setDeviceConfig(configValue: string, option: number): Promise<boolean> {
+  /**
+   * Flush device configurations to device
+   * @param configValue config value
+   * @param option device configuration type
+   */
+  private async setDeviceConfig(
+      configValue: string, option: ConfigDeviceOptions): Promise<boolean> {
     // Try to close serial monitor
     try {
       await vscode.commands.executeCommand(
@@ -397,14 +499,14 @@ export class AZ3166Device extends ArduinoDeviceBase {
     // Set selected connection string to device
     const platform = os.platform();
     if (platform === OSPlatform.WIN32) {
-      return await this.flushDeviceConfig(configValue, option);
+      return await this.flushDeviceConfigWin32(configValue, option);
     } else {
       return await this.flushDeviceConfigUnixAndMac(configValue, option);
     }
   }
 
-  async flushDeviceConfigUnixAndMac(configValue: string, option: number):
-      Promise<boolean> {
+  private async flushDeviceConfigUnixAndMac(
+      configValue: string, option: ConfigDeviceOptions): Promise<boolean> {
     return new Promise(
         async (
             resolve: (value: boolean) => void,
@@ -502,8 +604,8 @@ export class AZ3166Device extends ArduinoDeviceBase {
         });
   }
 
-  async flushDeviceConfig(configValue: string, option: number):
-      Promise<boolean> {
+  private async flushDeviceConfigWin32(
+      configValue: string, option: ConfigDeviceOptions): Promise<boolean> {
     return new Promise(
         async (
             resolve: (value: boolean) => void,

@@ -7,6 +7,7 @@ import * as path from 'path';
 import * as request from 'request-promise';
 import * as vscode from 'vscode';
 
+import {CancelOperationError} from '../common/CancelOperationError';
 import {ConfigHandler} from '../configHandler';
 import {ConfigKey, ScaffoldType} from '../constants';
 import {FileUtility} from '../FileUtility';
@@ -21,7 +22,6 @@ const constants = {
   accessEndpoint: 'http://192.168.4.1',
   userjsonFilename: 'userdata.json'
 };
-
 
 export class IoTButtonDevice implements Device {
   private deviceType: DeviceType;
@@ -99,7 +99,7 @@ export class IoTButtonDevice implements Device {
     return true;
   }
 
-  async configDeviceSettings(): Promise<boolean> {
+  async configDeviceSettings(): Promise<void> {
     // TODO: try to connect to access point host of IoT button to detect the
     // connection.
     const configSelectionItems: vscode.QuickPickItem[] = [
@@ -139,7 +139,8 @@ export class IoTButtonDevice implements Device {
         });
 
     if (!configSelection) {
-      return false;
+      throw new CancelOperationError(
+          'IoT Button device setting type selection cancelled.');
     }
 
     if (configSelection.detail === 'Config WiFi') {
@@ -183,7 +184,7 @@ export class IoTButtonDevice implements Device {
       }
     } else {
       try {
-        const res = await this.configSaveAndShutdown();
+        await this.configSaveAndShutdown();
       } catch (error) {
         // Ignore.
         // Because the button has been shutdown, we won't get any response for
@@ -191,7 +192,7 @@ export class IoTButtonDevice implements Device {
       }
 
       vscode.window.showInformationMessage('Shutdown IoT button completed.');
-      return true;
+      return;
     }
 
     return await this.configDeviceSettings();

@@ -33,10 +33,7 @@ export class ProjectInitializer {
       context: vscode.ExtensionContext, channel: vscode.OutputChannel,
       telemetryContext: TelemetryContext) {
     // Only create project when not in remote environment
-    const isLocal = RemoteExtension.checkLocalBeforeRunCommand(context);
-    if (!isLocal) {
-      return;
-    }
+    RemoteExtension.ensureLocalBeforeRunCommand(context);
 
     let openInNewWindow = false;
     // If current window contains other project, open the created project in new

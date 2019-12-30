@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 import {BoardProvider} from '../boardProvider';
+import {CancelOperationError} from '../common/CancelOperationError';
 import {ConfigHandler} from '../configHandler';
 import {ConfigKey, OSPlatform} from '../constants';
 import {TelemetryContext} from '../telemetry';
@@ -16,6 +17,11 @@ import {TelemetryContext} from '../telemetry';
 import {ArduinoDeviceBase} from './ArduinoDeviceBase';
 import {DeviceType} from './Interfaces/Device';
 import {TemplateFileInfo} from './Interfaces/ProjectTemplate';
+
+enum ConfigDeviceSettings {
+  Copy = 'Copy',
+  ConfigCRC = 'Config CRC'
+}
 
 export class Esp32Device extends ArduinoDeviceBase {
   private templateFiles: TemplateFileInfo[] = [];
@@ -83,18 +89,18 @@ export class Esp32Device extends ArduinoDeviceBase {
     this.createCore(this.board, this.templateFiles);
   }
 
-  async configDeviceSettings(): Promise<boolean> {
+  async configDeviceSettings(): Promise<void> {
     const configSelectionItems: vscode.QuickPickItem[] = [
       {
         label: 'Copy device connection string',
         description: 'Copy device connection string',
-        detail: 'Copy'
+        detail: ConfigDeviceSettings.Copy
       },
       {
         label: 'Generate CRC for OTA',
         description:
             'Generate Cyclic Redundancy Check(CRC) code for OTA Update',
-        detail: 'Config CRC'
+        detail: ConfigDeviceSettings.ConfigCRC
       }
     ];
 
@@ -107,14 +113,13 @@ export class Esp32Device extends ArduinoDeviceBase {
         });
 
     if (!configSelection) {
-      return false;
+      throw new CancelOperationError(
+          'ESP32 device setting type selection cancelled.');
     }
 
-    if (configSelection.detail === 'Config CRC') {
-      const retValue: boolean =
-          await this.generateCrc(this.extensionContext, this.channel);
-      return retValue;
-    } else if (configSelection.detail === 'Copy') {
+    if (configSelection.detail === ConfigDeviceSettings.ConfigCRC) {
+      await this.generateCrc(this.channel);
+    } else if (configSelection.detail === ConfigDeviceSettings.Copy) {
       const deviceConnectionString =
           ConfigHandler.get<string>(ConfigKey.iotHubDeviceConnectionString);
 
@@ -123,10 +128,11 @@ export class Esp32Device extends ArduinoDeviceBase {
             'Unable to get the device connection string, please invoke the command of Azure Provision first.');
       }
       clipboardy.writeSync(deviceConnectionString);
-      return true;
+      return;
+    } else {
+      throw new Error(
+          `Unsupported configuration type: ${configSelection.detail}.`);
     }
-
-    return false;
   }
 
   async preCompileAction(): Promise<boolean> {

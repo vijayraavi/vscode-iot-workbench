@@ -134,7 +134,6 @@ export function getFirstWorkspaceFolderPath(showWarningMessage = true): string {
     }
     return '';
   }
-
   return vscode.workspace.workspaceFolders[0].uri.fsPath;
 }
 
@@ -590,7 +589,13 @@ export async function properlyOpenIoTWorkspaceProject(
 }
 
 export function isWorkspaceProject(): boolean {
-  const rootPath = getFirstWorkspaceFolderPath();
+  let rootPath = '';
+  try {
+    rootPath = getFirstWorkspaceFolderPath();
+  } catch (error) {
+    return false;
+  }
+
   const workbenchFileName =
       path.join(rootPath, 'Device', FileNames.iotWorkbenchProjectFileName);
   const workspaceFile = getWorkspaceFile(rootPath);

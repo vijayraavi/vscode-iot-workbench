@@ -178,10 +178,7 @@ export class ExampleExplorer {
   async selectBoard(
       context: vscode.ExtensionContext, channel: vscode.OutputChannel,
       telemetryContext: TelemetryContext) {
-    const isLocal = RemoteExtension.checkLocalBeforeRunCommand(context);
-    if (!isLocal) {
-      return;
-    }
+    RemoteExtension.ensureLocalBeforeRunCommand(context);
 
     const boardFolderPath = context.asAbsolutePath(path.join(
         FileNames.resourcesFolderName, FileNames.templatesFolderName));

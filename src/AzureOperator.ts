@@ -8,8 +8,6 @@ import * as vscode from 'vscode';
 import {TelemetryContext} from './telemetry';
 import {constructAndLoadIoTProject} from './utils';
 import {RemoteExtension} from './Models/RemoteExtension';
-import {CancelOperationError} from './common/CancelOperationError';
-
 
 export class AzureOperator {
   async provision(
@@ -30,10 +28,7 @@ export class AzureOperator {
       context: vscode.ExtensionContext, channel: vscode.OutputChannel,
       telemetryContext: TelemetryContext) {
     // Azure deploy command can be executed only in local environment
-    const isLocal = RemoteExtension.checkLocalBeforeRunCommand(context);
-    if (!isLocal) {
-      return;
-    }
+    RemoteExtension.ensureLocalBeforeRunCommand(context);
 
     const iotProject =
         await constructAndLoadIoTProject(context, channel, telemetryContext);

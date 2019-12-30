@@ -5,6 +5,7 @@ import * as fs from 'fs-plus';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
+import {CancelOperationError} from '../common/CancelOperationError';
 import {VscodeCommands} from '../common/Commands';
 import {ConfigHandler} from '../configHandler';
 import {ConfigKey, DependentExtensions, FileNames, OperationType, OSPlatform, PlatformType, ScaffoldType} from '../constants';
@@ -121,7 +122,7 @@ export abstract class ArduinoDeviceBase implements Device {
   }
 
 
-  abstract async configDeviceSettings(): Promise<boolean>;
+  abstract async configDeviceSettings(): Promise<void>;
 
   async load(): Promise<boolean> {
     const deviceFolderPath = this.deviceFolder;
@@ -232,41 +233,28 @@ export abstract class ArduinoDeviceBase implements Device {
     }
   }
 
-  async generateCrc(
-      context: vscode.ExtensionContext, channel: vscode.OutputChannel) {
+  async generateCrc(channel: vscode.OutputChannel): Promise<void> {
     if (!(vscode.workspace.workspaceFolders &&
           vscode.workspace.workspaceFolders.length > 0)) {
-      const message = 'No workspace opened.';
-      vscode.window.showWarningMessage(message);
-      utils.channelShowAndAppendLine(channel, message);
-      return false;
+      throw new Error('No workspace opened.');
     }
 
     const devicePath = ConfigHandler.get<string>(ConfigKey.devicePath);
     if (!devicePath) {
-      const message = 'No device path found in workspace configuration.';
-      vscode.window.showWarningMessage(message);
-      utils.channelShowAndAppendLine(channel, message);
-      return false;
+      throw new Error('No device path found in workspace configuration.');
     }
     const deviceBuildLocation = path.join(
         vscode.workspace.workspaceFolders[0].uri.fsPath, '..', devicePath,
         '.build');
 
     if (!deviceBuildLocation) {
-      const message = 'No device compile output folder found.';
-      vscode.window.showWarningMessage(message);
-      utils.channelShowAndAppendLine(channel, message);
-      return false;
+      throw new Error('No device compile output folder found.');
     }
 
     const binFiles = fs.listSync(deviceBuildLocation, ['bin']);
     if (!binFiles || !binFiles.length) {
-      const message =
-          'No bin file found. Please run the command of Device Compile first.';
-      vscode.window.showWarningMessage(message);
-      utils.channelShowAndAppendLine(channel, message);
-      return false;
+      throw new Error(
+          'No bin file found. Please run the command of Device Compile first.');
     }
 
     let binFilePath = '';
@@ -288,14 +276,14 @@ export abstract class ArduinoDeviceBase implements Device {
       });
 
       if (!choice || !choice.description) {
-        return false;
+        throw new CancelOperationError('Bin file selection cancelled.');
       }
 
       binFilePath = choice.description;
     }
 
     if (!binFilePath || !fs.existsSync(binFilePath)) {
-      return false;
+      throw new Error(`Bin file path does not exist: ${binFilePath}.`);
     }
 
     const res = OTA.generateCrc(binFilePath);
@@ -310,8 +298,6 @@ export abstract class ArduinoDeviceBase implements Device {
     channel.appendLine('fwSize: ' + res.size);
     channel.appendLine('');
     channel.appendLine('======================================');
-
-    return true;
   }
 
   async configDeviceEnvironment(

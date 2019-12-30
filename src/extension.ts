@@ -199,10 +199,7 @@ export async function activate(context: vscode.ExtensionContext) {
   initCommandWithTelemetry(
       context, telemetryWorker, outputChannel, WorkbenchCommands.Workbench,
       EventNames.setProjectDefaultPath, true, async () => {
-        const isLocal = RemoteExtension.checkLocalBeforeRunCommand(context);
-        if (!isLocal) {
-          return;
-        }
+        RemoteExtension.ensureLocalBeforeRunCommand(context);
         const settings = await IoTWorkbenchSettings.getInstance();
         await settings.setWorkbenchPath();
         return;
