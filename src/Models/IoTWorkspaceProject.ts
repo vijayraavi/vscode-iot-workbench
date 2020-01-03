@@ -38,15 +38,15 @@ const ioTHubDeviceModule =
 const streamAnalyticsJobModule =
     impor('./StreamAnalyticsJob') as typeof import('./StreamAnalyticsJob');
 
-const folderName = {
-  deviceDefaultFolderName: 'Device',
-  functionDefaultFolderName: 'Functions',
-  asaFolderName: 'StreamAnalytics'
-};
-
 export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
   private deviceRootPath = '';
   private workspaceConfigFilePath = '';
+
+  static folderName = {
+    deviceDefaultFolderName: 'Device',
+    functionDefaultFolderName: 'Functions',
+    asaFolderName: 'StreamAnalytics'
+  };
 
   constructor(
       context: vscode.ExtensionContext, channel: vscode.OutputChannel,
@@ -111,8 +111,9 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
     const createTimeScaffoldType = ScaffoldType.Local;
 
     // Init device root path
-    this.deviceRootPath =
-        path.join(this.projectRootPath, folderName.deviceDefaultFolderName);
+    this.deviceRootPath = path.join(
+        this.projectRootPath,
+        IoTWorkspaceProject.folderName.deviceDefaultFolderName);
     if (!await FileUtility.directoryExists(
             createTimeScaffoldType, this.deviceRootPath)) {
       await FileUtility.mkdirRecursively(
@@ -136,10 +137,11 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
 
     // Init device
     await this.initDevice(boardId, createTimeScaffoldType, templateFilesInfo);
-    workspace.folders.push({path: folderName.deviceDefaultFolderName});
+    workspace.folders.push(
+        {path: IoTWorkspaceProject.folderName.deviceDefaultFolderName});
     workspace.settings[`IoTWorkbench.${ConfigKey.boardId}`] = boardId;
     workspace.settings[`IoTWorkbench.${ConfigKey.devicePath}`] =
-        folderName.deviceDefaultFolderName;
+        IoTWorkspaceProject.folderName.deviceDefaultFolderName;
 
     // Create azure components
     await this.createAzureComponentsWithProjectType(
@@ -329,7 +331,8 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
           const dependencies =
               this.extractComponentDependencies(componentConfig, components);
           const queryPath = path.join(
-              this.projectRootPath, folderName.asaFolderName, 'query.asaql');
+              this.projectRootPath,
+              IoTWorkspaceProject.folderName.asaFolderName, 'query.asaql');
           const asa = new streamAnalyticsJobModule.StreamAnalyticsJob(
               queryPath, this.extensionContext, this.projectRootPath,
               this.channel, dependencies);
@@ -406,21 +409,23 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
             new ioTHubModule.IoTHub(this.projectRootPath, this.channel);
 
         const functionDir = path.join(
-            this.projectRootPath, folderName.functionDefaultFolderName);
+            this.projectRootPath,
+            IoTWorkspaceProject.folderName.functionDefaultFolderName);
         if (!await FileUtility.directoryExists(scaffoldType, functionDir)) {
           await FileUtility.mkdirRecursively(scaffoldType, functionDir);
         }
         const azureFunctions = new azureFunctionsModule.AzureFunctions(
-            functionDir, folderName.functionDefaultFolderName, this.channel,
-            null, [{
+            functionDir,
+            IoTWorkspaceProject.folderName.functionDefaultFolderName,
+            this.channel, null, [{
               component: iothub,
               type: azureComponentConfigModule.DependencyType.Input
             }] /*Dependencies*/);
 
         workspaceConfig.folders.push(
-            {path: folderName.functionDefaultFolderName});
+            {path: IoTWorkspaceProject.folderName.functionDefaultFolderName});
         workspaceConfig.settings[`IoTWorkbench.${ConfigKey.functionPath}`] =
-            folderName.functionDefaultFolderName;
+            IoTWorkspaceProject.folderName.functionDefaultFolderName;
 
         this.componentList.push(iothub);
         this.componentList.push(azureFunctions);
@@ -433,8 +438,8 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
         const cosmosDB = new cosmosDBModule.CosmosDB(
             this.extensionContext, this.projectRootPath, this.channel);
 
-        const asaDir =
-            path.join(this.projectRootPath, folderName.asaFolderName);
+        const asaDir = path.join(
+            this.projectRootPath, IoTWorkspaceProject.folderName.asaFolderName);
         if (!await FileUtility.directoryExists(scaffoldType, asaDir)) {
           await FileUtility.mkdirRecursively(scaffoldType, asaDir);
         }
@@ -460,9 +465,10 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
               }
             ]);
 
-        workspaceConfig.folders.push({path: folderName.asaFolderName});
+        workspaceConfig.folders.push(
+            {path: IoTWorkspaceProject.folderName.asaFolderName});
         workspaceConfig.settings[`IoTWorkbench.${ConfigKey.asaPath}`] =
-            folderName.asaFolderName;
+            IoTWorkspaceProject.folderName.asaFolderName;
 
         this.componentList.push(iothub);
         this.componentList.push(cosmosDB);
