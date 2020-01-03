@@ -9,7 +9,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 import {BoardProvider} from '../boardProvider';
-import {CancelOperationError} from '../common/CancelOperationError';
+import {ConfigNotFoundError, OperationCanceledError, TypeNotSupportedError} from '../common/Error/Error';
 import {ConfigHandler} from '../configHandler';
 import {ConfigKey, OSPlatform} from '../constants';
 import {TelemetryContext} from '../telemetry';
@@ -24,7 +24,6 @@ enum ConfigDeviceSettings {
 }
 
 export class Esp32Device extends ArduinoDeviceBase {
-  private templateFiles: TemplateFileInfo[] = [];
   private static _boardId = 'esp32';
 
   private componentId: string;
@@ -86,7 +85,7 @@ export class Esp32Device extends ArduinoDeviceBase {
   }
 
   async create(): Promise<void> {
-    this.createCore(this.board, this.templateFiles);
+    this.createCore();
   }
 
   async configDeviceSettings(): Promise<void> {
@@ -113,7 +112,7 @@ export class Esp32Device extends ArduinoDeviceBase {
         });
 
     if (!configSelection) {
-      throw new CancelOperationError(
+      throw new OperationCanceledError(
           'ESP32 device setting type selection cancelled.');
     }
 
@@ -124,14 +123,15 @@ export class Esp32Device extends ArduinoDeviceBase {
           ConfigHandler.get<string>(ConfigKey.iotHubDeviceConnectionString);
 
       if (!deviceConnectionString) {
-        throw new Error(
-            'Unable to get the device connection string, please invoke the command of Azure Provision first.');
+        throw new ConfigNotFoundError(
+            ConfigKey.iotHubDeviceConnectionString,
+            'Please provision Azure service first.');
       }
       clipboardy.writeSync(deviceConnectionString);
       return;
     } else {
-      throw new Error(
-          `Unsupported configuration type: ${configSelection.detail}.`);
+      throw new TypeNotSupportedError(
+          'configuration type', `${configSelection.detail}`);
     }
   }
 

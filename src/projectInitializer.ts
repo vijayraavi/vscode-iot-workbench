@@ -13,7 +13,7 @@ import {IoTWorkbenchSettings} from './IoTSettings';
 import {FileUtility} from './FileUtility';
 import {ProjectTemplate, ProjectTemplateType, TemplatesType} from './Models/Interfaces/ProjectTemplate';
 import {RemoteExtension} from './Models/RemoteExtension';
-import {CancelOperationError} from './common/CancelOperationError';
+import {OperationCanceledError, TypeNotSupportedError, OperationFailedError, ResourceNotFoundError} from './common/Error/Error';
 
 const impor = require('impor')(__dirname);
 const ioTWorkspaceProjectModule = impor('./Models/IoTWorkspaceProject') as
@@ -60,7 +60,7 @@ export class ProjectInitializer {
           const projectPath =
               await this.generateProjectFolder(telemetryContext, scaffoldType);
           if (!projectPath) {
-            throw new CancelOperationError(
+            throw new OperationCanceledError(
                 `Project initialization cancelled: Project name input cancelled.`);
           }
 
@@ -68,7 +68,7 @@ export class ProjectInitializer {
           const platformSelection =
               await utils.selectPlatform(scaffoldType, context);
           if (!platformSelection) {
-            throw new CancelOperationError(
+            throw new OperationCanceledError(
                 `Project initialization cancelled: Platform selection cancelled.`);
           } else {
             telemetryContext.properties.platform = platformSelection.label;
@@ -76,25 +76,15 @@ export class ProjectInitializer {
 
           // Step 3: Select template
           let template: ProjectTemplate|undefined;
-          const resourceRootPath = context.asAbsolutePath(path.join(
-              FileNames.resourcesFolderName, FileNames.templatesFolderName));
-          const templateJsonFilePath =
-              path.join(resourceRootPath, FileNames.templateFileName);
-          const templateJsonFileString =
-              await FileUtility.readFile(
-                  scaffoldType, templateJsonFilePath, 'utf8') as string;
-          const templateJson = JSON.parse(templateJsonFileString);
-          if (!templateJson) {
-            throw new Error(`Fail to load template json.`);
-          }
-
+          const templateJson =
+              await utils.getTemplateJson(context, scaffoldType);
           let templateName: string|undefined;
           if (platformSelection.label === PlatformType.Arduino) {
             const templateSelection =
                 await this.selectTemplate(templateJson, PlatformType.Arduino);
 
             if (!templateSelection) {
-              throw new CancelOperationError(
+              throw new OperationCanceledError(
                   `Project initialization cancelled: Project template selection cancelled.`);
             } else {
               telemetryContext.properties.template = templateSelection.label;
@@ -116,14 +106,18 @@ export class ProjectInitializer {
                     template.name === templateName;
               });
           if (!template) {
-            throw new Error(
-                `Fail to find the wanted project template in template json file.`);
+            throw new ResourceNotFoundError(
+                'initialize iot project',
+                `project template in template json file with the given template name ${
+                    templateName} and platform ${platformSelection.label}`);
           }
 
           // Step 4: Load the list of template files
           const projectTemplateType: ProjectTemplateType =
               utils.getEnumKeyByEnumValue(ProjectTemplateType, template.type);
 
+          const resourceRootPath = context.asAbsolutePath(path.join(
+              FileNames.resourcesFolderName, FileNames.templatesFolderName));
           const templateFolder = path.join(resourceRootPath, template.path);
           const templateFilesInfo =
               await utils.getTemplateFilesInfo(templateFolder);
@@ -136,7 +130,7 @@ export class ProjectInitializer {
             project = new ioTWorkspaceProjectModule.IoTWorkspaceProject(
                 context, channel, telemetryContext, projectPath);
           } else {
-            throw new Error('unsupported platform');
+            throw new TypeNotSupportedError('platform', `${template.platform}`);
           }
           await project.create(
               templateFilesInfo, projectTemplateType, template.boardId,

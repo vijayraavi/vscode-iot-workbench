@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import * as utils from '../utils';
 import {DigitalTwinConstants} from './DigitalTwinConstants';
-import {CancelOperationError} from '../common/CancelOperationError';
+import {OperationCanceledError} from '../common/Error/Error';
 import {ModelRepositoryManager} from './pnp/src/modelRepository/modelRepositoryManager';
 import {ApiProvider} from './pnp/src/api/apiProvider';
 
@@ -47,7 +47,7 @@ export class DigitalTwinUtility {
       // skip for UserCancelledError
     }
     if (!result) {
-      throw new CancelOperationError(
+      throw new OperationCanceledError(
           `Selected device capability model file cancelled.`);
     }
 

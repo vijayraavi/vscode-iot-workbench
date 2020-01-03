@@ -6,13 +6,13 @@ import {DependentExtensions} from '../constants';
 import {DialogResponses} from '../DialogResponses';
 import {WorkbenchExtension} from '../WorkbenchExtension';
 import {VscodeCommands} from '../common/Commands';
-import {CancelOperationError} from '../common/CancelOperationError';
+import {OperationCanceledError, RemoteEnvNotSupportedError, OperationFailedError} from '../common/Error/Error';
 
 export class RemoteExtension {
   static isRemote(context: vscode.ExtensionContext) {
     const extension = WorkbenchExtension.getExtension(context);
     if (!extension) {
-      throw new Error('Fail to get workbench extension.');
+      throw new OperationFailedError('get workbench extension ');
     }
     return extension.extensionKind === vscode.ExtensionKind.Workspace;
   }
@@ -42,7 +42,7 @@ export class RemoteExtension {
   static async checkRemoteExtension(): Promise<void> {
     const res = await RemoteExtension.isAvailable();
     if (!res) {
-      throw new CancelOperationError(
+      throw new OperationCanceledError(
           `Remote extension is not available. Please install ${
               DependentExtensions.remote} first.`);
     }
@@ -54,8 +54,8 @@ export class RemoteExtension {
    */
   static ensureLocalBeforeRunCommand(context: vscode.ExtensionContext): void {
     if (RemoteExtension.isRemote(context)) {
-      throw new Error(
-          `The command is not supported to be run in a remote environment. Open a new window and run this command again.`);
+      const message = 'Open a new window and run this command again.';
+      throw new RemoteEnvNotSupportedError(message);
     }
   }
 }

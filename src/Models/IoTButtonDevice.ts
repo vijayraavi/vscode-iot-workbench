@@ -7,7 +7,7 @@ import * as path from 'path';
 import * as request from 'request-promise';
 import * as vscode from 'vscode';
 
-import {CancelOperationError} from '../common/CancelOperationError';
+import {AugumentInvalidError, OperationCanceledError, OperationFailedError, ResourceNotFoundError} from '../common/Error/Error';
 import {ConfigHandler} from '../configHandler';
 import {ConfigKey, ScaffoldType} from '../constants';
 import {FileUtility} from '../FileUtility';
@@ -65,20 +65,18 @@ export class IoTButtonDevice implements Device {
     return true;
   }
 
-  async load(): Promise<boolean> {
-    const deviceFolderPath = this.deviceFolder;
-
-    if (!fs.existsSync(deviceFolderPath)) {
-      throw new Error('Unable to find the device folder inside the project.');
-    }
-    return true;
+  async load(): Promise<void> {
+    const loadTimeScaffoldType = ScaffoldType.Workspace;
+    this.validateDeviceFolder(loadTimeScaffoldType);
   }
 
   async create(): Promise<void> {
     const createTimeScaffoldType = ScaffoldType.Local;
     if (!await FileUtility.directoryExists(
             createTimeScaffoldType, this.deviceFolder)) {
-      throw new Error(`Internal error: Couldn't find the template folder.`);
+      throw new ResourceNotFoundError(
+          `device folder ${this.deviceFolder}`,
+          'Please initialize the device first.');
     }
 
     for (const fileInfo of this.templateFilesInfo) {
@@ -139,7 +137,7 @@ export class IoTButtonDevice implements Device {
         });
 
     if (!configSelection) {
-      throw new CancelOperationError(
+      throw new OperationCanceledError(
           'IoT Button device setting type selection cancelled.');
     }
 
@@ -205,7 +203,7 @@ export class IoTButtonDevice implements Device {
     const res = await request(option);
 
     if (!res) {
-      throw new Error('Empty response.');
+      throw new OperationFailedError('Empty response.');
     }
 
     return res;
@@ -318,8 +316,9 @@ export class IoTButtonDevice implements Device {
       if ((deviceConnectionString.indexOf('HostName') === -1) ||
           (deviceConnectionString.indexOf('DeviceId') === -1) ||
           (deviceConnectionString.indexOf('SharedAccessKey') === -1)) {
-        throw new Error(
-            'The format of the IoT Hub Device connection string is invalid. Please provide a valid Device connection string.');
+        throw new AugumentInvalidError(
+            'The format of IoT Hub Device connection string',
+            'Please provide a valid Device connection string.');
       }
     }
 
@@ -353,17 +352,15 @@ export class IoTButtonDevice implements Device {
   }
 
   async configUserData() {
-    const deviceFolderPath = this.deviceFolder;
-
-    if (!fs.existsSync(deviceFolderPath)) {
-      throw new Error('Unable to find the device folder inside the project.');
+    if (!fs.existsSync(this.deviceFolder)) {
+      throw new ResourceNotFoundError(`device folder ${this.deviceFolder}`);
     }
 
     const userjsonFilePath =
-        path.join(deviceFolderPath, constants.userjsonFilename);
+        path.join(this.deviceFolder, constants.userjsonFilename);
 
     if (!fs.existsSync(userjsonFilePath)) {
-      throw new Error('The user json file does not exist.');
+      throw new ResourceNotFoundError(`user json file ${userjsonFilePath}`);
     }
 
     let userjson = {};
@@ -419,4 +416,16 @@ export class IoTButtonDevice implements Device {
 
   async configDeviceEnvironment(
       deviceRootPath: string, scaffoldType: ScaffoldType): Promise<void> {}
+
+  /**
+   * Validate whether device folder exists. If not, throw error.
+   * @param scaffoldType scaffold type
+   */
+  async validateDeviceFolder(scaffoldType: ScaffoldType): Promise<void> {
+    if (!await FileUtility.directoryExists(scaffoldType, this.deviceFolder)) {
+      throw new ResourceNotFoundError(
+          `device folder path ${this.deviceFolder}`,
+          'Please initialize the project first.');
+    }
+  }
 }

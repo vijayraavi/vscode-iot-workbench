@@ -23,7 +23,8 @@ import {RemoteExtension} from '../Models/RemoteExtension';
 import {DigitalTwinUtility} from './DigitalTwinUtility';
 import {CodeGenUtility} from './DigitalTwinCodeGen/CodeGenUtility';
 import {FileUtility} from '../FileUtility';
-import {CancelOperationError} from '../common/CancelOperationError';
+import {OperationCanceledError} from '../common/Error/Error';
+import {Utility} from './pnp/src/common/utility';
 
 interface CodeGeneratorDownloadLocation {
   win32Md5: string;
@@ -172,7 +173,8 @@ export class CodeGeneratorCore {
           {ignoreFocusOut: true, placeHolder: 'Please select an option:'});
 
       if (!regenSelection) {
-        throw new CancelOperationError('Re-generate code selection cancelled.');
+        throw new OperationCanceledError(
+            'Re-generate code selection cancelled.');
       }
 
       // User select regenerate code
@@ -219,7 +221,7 @@ export class CodeGeneratorCore {
     });
 
     if (!codeGenProjectName) {
-      throw new CancelOperationError(
+      throw new OperationCanceledError(
           `Project name is not specified, cancelled.`);
     }
 
@@ -231,7 +233,7 @@ export class CodeGeneratorCore {
       const choice = await vscode.window.showWarningMessage(
           messge, DialogResponses.yes, DialogResponses.no);
       if (choice !== DialogResponses.yes) {
-        throw new CancelOperationError(
+        throw new OperationCanceledError(
             `Valid project name is not specified, cancelled.`);
       }
     }
@@ -262,7 +264,7 @@ export class CodeGeneratorCore {
     });
 
     if (!languageSelection) {
-      throw new CancelOperationError('CodeGen language selection cancelled.');
+      throw new OperationCanceledError('CodeGen language selection cancelled.');
     }
 
     utils.channelShowAndAppendLine(
@@ -289,7 +291,7 @@ export class CodeGeneratorCore {
         });
 
     if (!deviceConnectionSelection) {
-      throw new CancelOperationError('Connection type selection cancelled.');
+      throw new OperationCanceledError('Connection type selection cancelled.');
     }
 
     const deviceConnection = codegenOptionsConfig.connectionTypes.find(
@@ -338,7 +340,7 @@ export class CodeGeneratorCore {
         {ignoreFocusOut: true, placeHolder: 'Select project template:'});
 
     if (!projectTemplateSelection) {
-      throw new CancelOperationError(
+      throw new OperationCanceledError(
           'CodeGen project template selection cancelled.');
     }
 
@@ -387,7 +389,7 @@ export class CodeGeneratorCore {
             });
 
         if (!deviceConnectionSelection) {
-          throw new CancelOperationError(
+          throw new OperationCanceledError(
               'IoT Device SDK reference type selection cancelled.');
         }
 

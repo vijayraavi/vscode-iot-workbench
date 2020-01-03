@@ -4,6 +4,7 @@ import {Guid} from 'guid-typescript';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
+import {OperationFailedError, ResourceNotFoundError, TypeNotSupportedError} from '../common/Error/Error';
 import {AzureComponentsStorage, FileNames, ScaffoldType} from '../constants';
 import {channelPrintJsonObject, channelShowAndAppendLine} from '../utils';
 
@@ -43,13 +44,14 @@ export class StreamAnalyticsJob implements Component, Provisionable,
     const componentConfig = await this.azureConfigHandler.getComponentById(
         ScaffoldType.Workspace, this.id);
     if (!componentConfig) {
-      throw new Error(
-          `Cannot find Azure Stream Analytics component with id ${this.id}.`);
+      throw new OperationFailedError(
+          `get Azure Stream Analytics component with id ${this.id}.`);
     }
 
     const componentInfo = componentConfig.componentInfo;
     if (!componentInfo) {
-      throw new Error(`You must provision Stream Analytics Job first.`);
+      throw new OperationFailedError(
+          'get component info', 'Please provision Stream Analytics Job first.');
     }
 
     const subscriptionId = componentInfo.values.subscriptionId;
@@ -58,7 +60,7 @@ export class StreamAnalyticsJob implements Component, Provisionable,
     AzureUtility.init(this.extensionContext, this.channel, subscriptionId);
     const azureClient = AzureUtility.getClient();
     if (!azureClient) {
-      throw new Error('Initialize Azure client failed.');
+      throw new OperationFailedError('initialize Azure client');
     }
 
     this.subscriptionId = subscriptionId;
@@ -149,30 +151,20 @@ export class StreamAnalyticsJob implements Component, Provisionable,
     return true;
   }
 
-  async load(): Promise<boolean> {
+  async load(): Promise<void> {
     const azureConfigFilePath = path.join(
         this.projectRootPath, AzureComponentsStorage.folderName,
         AzureComponentsStorage.fileName);
+    const azureConfigs = await AzureConfigFileHandler.loadAzureConfigs(
+        ScaffoldType.Workspace, azureConfigFilePath);
 
-    if (!fs.existsSync(azureConfigFilePath)) {
-      return false;
+    const asaConfig = azureConfigs.componentConfigs.find(
+        config => config.type === this.componentType);
+    if (asaConfig) {
+      this.componentId = asaConfig.id;
+      this.dependencies = asaConfig.dependencies;
+      // Load other information from config file.
     }
-
-    let azureConfigs: AzureConfigs;
-
-    try {
-      azureConfigs = JSON.parse(fs.readFileSync(azureConfigFilePath, 'utf8'));
-      const asaConfig = azureConfigs.componentConfigs.find(
-          config => config.type === this.componentType);
-      if (asaConfig) {
-        this.componentId = asaConfig.id;
-        this.dependencies = asaConfig.dependencies;
-        // Load other information from config file.
-      }
-    } catch (error) {
-      return false;
-    }
-    return true;
   }
 
   async create(): Promise<void> {
@@ -229,7 +221,7 @@ export class StreamAnalyticsJob implements Component, Provisionable,
       if (!asaDeploy || !asaDeploy.properties ||
           !asaDeploy.properties.outputs ||
           !asaDeploy.properties.outputs.streamAnalyticsJobName) {
-        throw new Error('Provision Stream Analytics Job failed.');
+        throw new OperationFailedError('provision Stream Analytics Job');
       }
       channelPrintJsonObject(this.channel, asaDeploy);
 
@@ -252,7 +244,9 @@ export class StreamAnalyticsJob implements Component, Provisionable,
       const componentConfig = await this.azureConfigHandler.getComponentById(
           scaffoldType, dependency.id);
       if (!componentConfig) {
-        throw new Error(`Cannot find component with id ${dependency.id}.`);
+        throw new ResourceNotFoundError(
+            'provision stream analystics job',
+            `component with id ${dependency.id}`);
       }
 
       if (dependency.type === DependencyType.Input) {
@@ -283,7 +277,8 @@ export class StreamAnalyticsJob implements Component, Provisionable,
             }
 
             if (!iotHubName || !iotHubKeyName || !iotHubKey) {
-              throw new Error('Cannot parse IoT Hub connection string.');
+              throw new OperationFailedError(
+                  'parse IoT Hub connection string.');
             }
 
             const asaIoTHubArmTemplatePath =
@@ -304,14 +299,14 @@ export class StreamAnalyticsJob implements Component, Provisionable,
             const asaInputDeploy = await AzureUtility.deployARMTemplate(
                 asaIoTHubArmTemplate, asaIotHubArmParameters);
             if (!asaInputDeploy) {
-              throw new Error('Provision Stream Analytics Job failed.');
+              throw new OperationFailedError('deploy arm template');
             }
 
             break;
           }
           default: {
-            throw new Error(
-                `Not supported ASA input type: ${componentConfig.type}.`);
+            throw new TypeNotSupportedError(
+                'ASA input type', `${componentConfig.type}`);
           }
         }
       } else {
@@ -328,7 +323,9 @@ export class StreamAnalyticsJob implements Component, Provisionable,
                 componentConfig.componentInfo.values.cosmosDBCollection;
             if (!cosmosDBAccountName || !cosmosDBDatabase ||
                 !cosmosDBCollection) {
-              throw new Error('Cannot get Cosmos DB connection information.');
+              throw new ResourceNotFoundError(
+                  'provision stream analystics job',
+                  'Cosmos DB connection information');
             }
 
             const asaCosmosDBArmTemplatePath =
@@ -349,14 +346,14 @@ export class StreamAnalyticsJob implements Component, Provisionable,
             const asaOutputDeploy = await AzureUtility.deployARMTemplate(
                 asaCosmosDBArmTemplate, asaCosmosArmParameters);
             if (!asaOutputDeploy) {
-              throw new Error('Provision Stream Analytics Job failed.');
+              throw new OperationFailedError('deploy arm template');
             }
 
             break;
           }
           default: {
-            throw new Error(
-                `Not supported ASA output type: ${componentConfig.type}.`);
+            throw new TypeNotSupportedError(
+                'ASA input type', `${componentConfig.type}`);
           }
         }
       }
@@ -410,7 +407,8 @@ export class StreamAnalyticsJob implements Component, Provisionable,
         this.streamAnalyticsJobName}/transformations/Transformation`;
     const apiVersion = '2015-10-01';
     if (!fs.existsSync(this.queryPath)) {
-      throw new Error(`Cannot find query file at ${this.queryPath}`);
+      throw new ResourceNotFoundError(
+          'deploy stream analytics job', `query file at ${this.queryPath}`);
     }
     const query = fs.readFileSync(this.queryPath, 'utf8');
     const parameters = {properties: {streamingUnits: 1, query}};

@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import * as sdk from 'vscode-iot-device-cube-sdk';
 
-import {CancelOperationError} from '../common/CancelOperationError';
+import {OperationCanceledError, OperationFailedError} from '../common/Error/Error';
 import {FileNames, OperationType, ScaffoldType} from '../constants';
 import {FileUtility} from '../FileUtility';
 import {TelemetryContext} from '../telemetry';
@@ -188,7 +188,7 @@ export class RaspberryPiDevice extends ContainerDeviceBase {
           placeHolder: 'Select an option',
         });
     if (!sshDiscoverOrInputChoice) {
-      throw new CancelOperationError(
+      throw new OperationCanceledError(
           'SSH configuration type selection cancelled.');
     }
 
@@ -209,7 +209,7 @@ export class RaspberryPiDevice extends ContainerDeviceBase {
                selectDeviceChoice.label === '$(sync) Discover again');
 
       if (!selectDeviceChoice) {
-        throw new CancelOperationError('Device selection cancelled.');
+        throw new OperationCanceledError('Device selection cancelled.');
       }
 
       if (selectDeviceChoice.label !== '$(gear) Manual setup') {
@@ -225,7 +225,7 @@ export class RaspberryPiDevice extends ContainerDeviceBase {
       };
       raspiHost = await vscode.window.showInputBox(raspiHostOption);
       if (!raspiHost) {
-        throw new CancelOperationError('Hostname input cancelled.');
+        throw new OperationCanceledError('Hostname input cancelled.');
       }
     }
     raspiHost = raspiHost || RaspberryPiUploadConfig.host;
@@ -238,7 +238,7 @@ export class RaspberryPiDevice extends ContainerDeviceBase {
     };
     const raspiPortString = await vscode.window.showInputBox(raspiPortOption);
     if (!raspiPortString) {
-      throw new CancelOperationError('Port input cancelled.');
+      throw new OperationCanceledError('Port input cancelled.');
     }
     const raspiPort = raspiPortString && !isNaN(Number(raspiPortString)) ?
         Number(raspiPortString) :
@@ -252,7 +252,7 @@ export class RaspberryPiDevice extends ContainerDeviceBase {
     };
     let raspiUser = await vscode.window.showInputBox(raspiUserOption);
     if (!raspiUser) {
-      throw new CancelOperationError('User name input cancelled.');
+      throw new OperationCanceledError('User name input cancelled.');
     }
     raspiUser = raspiUser || RaspberryPiUploadConfig.user;
 
@@ -264,7 +264,7 @@ export class RaspberryPiDevice extends ContainerDeviceBase {
     };
     let raspiPassword = await vscode.window.showInputBox(raspiPasswordOption);
     if (raspiPassword === undefined) {
-      throw new CancelOperationError('Password input cancelled.');
+      throw new OperationCanceledError('Password input cancelled.');
     }
     raspiPassword = raspiPassword || RaspberryPiUploadConfig.password;
 
@@ -276,7 +276,7 @@ export class RaspberryPiDevice extends ContainerDeviceBase {
     };
     let raspiPath = await vscode.window.showInputBox(raspiPathOption);
     if (!raspiPath) {
-      throw new CancelOperationError(
+      throw new OperationCanceledError(
           'Project destination path input cancelled.');
     }
     raspiPath = raspiPath || RaspberryPiUploadConfig.projectPath;

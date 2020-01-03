@@ -4,7 +4,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-import {CancelOperationError} from '../common/CancelOperationError';
+import {OperationCanceledError, OperationFailedError, ResourceNotFoundError} from '../common/Error/Error';
 import {ConfigKey, EventNames, FileNames, ScaffoldType} from '../constants';
 import {FileUtility} from '../FileUtility';
 import {TelemetryContext, TelemetryWorker} from '../telemetry';
@@ -207,7 +207,7 @@ export abstract class IoTWorkbenchProjectBase {
 
         const res = await item.provision();
         if (!res) {
-          throw new CancelOperationError('Provision cancelled.');
+          throw new OperationCanceledError('Provision cancelled.');
         }
       }
     }
@@ -258,12 +258,12 @@ export abstract class IoTWorkbenchProjectBase {
             {ignoreFocusOut: true, placeHolder: 'Deploy process'});
 
         if (!selection) {
-          throw new CancelOperationError(`Component deployment cancelled.`);
+          throw new OperationCanceledError(`Component deployment cancelled.`);
         }
 
         const res = await item.deploy();
         if (!res) {
-          throw new Error(`The deployment of ${item.name} failed.`);
+          throw new OperationFailedError(`deploy ${item.name}`);
         }
       }
     }
@@ -319,8 +319,9 @@ export abstract class IoTWorkbenchProjectBase {
   async validateProjectRootPath(scaffoldType: ScaffoldType): Promise<void> {
     if (!await FileUtility.directoryExists(
             scaffoldType, this.projectRootPath)) {
-      throw new Error(`Project root path ${
-          this.projectRootPath} does not exist. Please initialize the project first.`);
+      throw new ResourceNotFoundError(
+          `project root path ${this.projectRootPath}`,
+          'Please initialize the project first.');
     }
   }
 }

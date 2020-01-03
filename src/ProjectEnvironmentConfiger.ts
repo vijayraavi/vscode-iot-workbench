@@ -13,7 +13,7 @@ import {RemoteExtension} from './Models/RemoteExtension';
 import {IoTWorkbenchProjectBase, OpenScenario} from './Models/IoTWorkbenchProjectBase';
 import {ProjectHostType} from './Models/Interfaces/ProjectHostType';
 import {configExternalCMakeProjectToIoTContainerProject} from './utils';
-import {CancelOperationError} from './common/CancelOperationError';
+import {OperationCanceledError, TypeNotSupportedError} from './common/Error/Error';
 
 const impor = require('impor')(__dirname);
 const ioTWorkspaceProjectModule = impor('./Models/IoTWorkspaceProject') as
@@ -66,7 +66,7 @@ export class ProjectEnvironmentConfiger {
         const message =
             `This is not an iot workbench Arduino project. You cannot configure it as Arduino platform.`;
         vscode.window.showWarningMessage(message);
-        throw new CancelOperationError(message);
+        throw new OperationCanceledError(message);
       }
 
       const projectRootPath = path.join(projectFileRootPath, '..');
@@ -86,7 +86,7 @@ export class ProjectEnvironmentConfiger {
       project = new ioTContainerizedProjectModule.IoTContainerizedProject(
           context, channel, telemetryContext, projectFileRootPath);
     } else {
-      throw new Error('unsupported platform');
+      throw new TypeNotSupportedError('platform', `${platform}`);
     }
 
     await project.load(scaffoldType);

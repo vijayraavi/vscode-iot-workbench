@@ -9,11 +9,12 @@ import rq = require('request');
 
 import {AzureComponentsStorage, FileNames, ScaffoldType} from '../constants';
 
-import {AzureComponentConfig, AzureConfigFileHandler, AzureConfigs, ComponentInfo, Dependency, DependencyConfig, DependencyType} from './AzureComponentConfig';
+import {AzureComponentConfig, AzureConfigFileHandler, ComponentInfo, Dependency, DependencyConfig, DependencyType} from './AzureComponentConfig';
 import {ARMTemplate, AzureUtility} from './AzureUtility';
 import {Component, ComponentType} from './Interfaces/Component';
 import {Provisionable} from './Interfaces/Provisionable';
 import {channelShowAndAppendLine, channelPrintJsonObject} from '../utils';
+import {OperationFailedError} from '../common/Error/Error';
 
 export class CosmosDB implements Component, Provisionable {
   dependencies: DependencyConfig[] = [];
@@ -55,30 +56,20 @@ export class CosmosDB implements Component, Provisionable {
     return true;
   }
 
-  async load(): Promise<boolean> {
+  async load(): Promise<void> {
     const azureConfigFilePath = path.join(
         this.projectRootPath, AzureComponentsStorage.folderName,
         AzureComponentsStorage.fileName);
 
-    if (!fs.existsSync(azureConfigFilePath)) {
-      return false;
+    const azureConfigs = await AzureConfigFileHandler.loadAzureConfigs(
+        ScaffoldType.Workspace, azureConfigFilePath);
+    const cosmosDBConfig = azureConfigs.componentConfigs.find(
+        config => config.type === this.componentType);
+    if (cosmosDBConfig) {
+      this.componentId = cosmosDBConfig.id;
+      this.dependencies = cosmosDBConfig.dependencies;
+      // Load other information from config file.
     }
-
-    let azureConfigs: AzureConfigs;
-
-    try {
-      azureConfigs = JSON.parse(fs.readFileSync(azureConfigFilePath, 'utf8'));
-      const cosmosDBConfig = azureConfigs.componentConfigs.find(
-          config => config.type === this.componentType);
-      if (cosmosDBConfig) {
-        this.componentId = cosmosDBConfig.id;
-        this.dependencies = cosmosDBConfig.dependencies;
-        // Load other information from config file.
-      }
-    } catch (error) {
-      return false;
-    }
-    return true;
   }
 
   async create(): Promise<void> {
@@ -135,7 +126,7 @@ export class CosmosDB implements Component, Provisionable {
           !cosmosDBDeploy.properties.outputs ||
           !cosmosDBDeploy.properties.outputs.cosmosDBAccountName ||
           !cosmosDBDeploy.properties.outputs.cosmosDBAccountKey) {
-        throw new Error('Provision Cosmos DB failed.');
+        throw new OperationFailedError('provision Cosmos DB');
       }
       channelPrintJsonObject(this.channel, cosmosDBDeploy);
 
@@ -143,7 +134,8 @@ export class CosmosDB implements Component, Provisionable {
         const componentConfig = await this.azureConfigHandler.getComponentById(
             scaffoldType, dependency.id);
         if (!componentConfig) {
-          throw new Error(`Cannot find component with id ${dependency.id}.`);
+          throw new OperationFailedError(
+              `find component with id ${dependency.id}`);
         }
         if (dependency.type === DependencyType.Input) {
           // CosmosDB input
@@ -200,7 +192,7 @@ export class CosmosDB implements Component, Provisionable {
       const cosmosDBApiRes =
           await this.ensureDatabase(cosmosDbName, cosmosDbKey, database);
       if (!cosmosDBApiRes) {
-        throw new Error('Error occurred when create database.');
+        throw new OperationFailedError('create data base');
       }
     } else {
       database = databaseChoose.label;
@@ -240,7 +232,7 @@ export class CosmosDB implements Component, Provisionable {
       const cosmosDBApiRes = await this.ensureCollection(
           cosmosDbName, cosmosDbKey, database, collection);
       if (!cosmosDBApiRes) {
-        throw new Error('Error occurred when create collection.');
+        throw new OperationFailedError('create data base collection');
       }
     } else {
       collection = collectionChoose.label;

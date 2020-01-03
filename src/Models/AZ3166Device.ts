@@ -13,14 +13,14 @@ import * as vscode from 'vscode';
 import * as WinReg from 'winreg';
 
 import {BoardProvider} from '../boardProvider';
-import {CancelOperationError} from '../common/CancelOperationError';
 import {ArduinoCommands} from '../common/Commands';
+import {BoardNotFoundError, OperationCanceledError, OperationFailedError, ResourceNotFoundError, TypeNotSupportedError} from '../common/Error/Error';
 import {ConfigHandler} from '../configHandler';
 import {ConfigKey, FileNames, OSPlatform, ScaffoldType} from '../constants';
 import {DialogResponses} from '../DialogResponses';
 import {FileUtility} from '../FileUtility';
 import {TelemetryContext} from '../telemetry';
-import {delay, getRegistryValues} from '../utils';
+import {delay, getEnumKeyByEnumValue, getRegistryValues} from '../utils';
 
 import {ArduinoDeviceBase} from './ArduinoDeviceBase';
 import {DeviceType} from './Interfaces/Device';
@@ -48,10 +48,10 @@ const constants = {
 };
 
 enum ConfigDeviceOptions {
-  ConnectionString = 'Config Connection String',
-  UDS = 'Config UDS',
-  DPS = 'Config DPS',
-  CRC = 'Config CRC'
+  ConnectionString = 'Config Device Connection String',
+  UDS = 'Config DPS Unique Device Secret (UDS)',
+  DPS = 'Config DPS credentials',
+  CRC = 'Generate CRC for OTA'
 }
 
 enum DeviceConnectionStringAcquisitionMethods {
@@ -77,7 +77,6 @@ export class AZ3166Device extends ArduinoDeviceBase {
     return this.componentId;
   }
 
-  private templateFiles: TemplateFileInfo[] = [];
   private static _boardId = 'devkit';
 
   static get boardId() {
@@ -125,7 +124,7 @@ export class AZ3166Device extends ArduinoDeviceBase {
   }
 
   async create(): Promise<void> {
-    this.createCore(this.board, this.templateFiles);
+    this.createCore();
   }
 
   async preCompileAction(): Promise<boolean> {
@@ -162,7 +161,6 @@ export class AZ3166Device extends ArduinoDeviceBase {
     const deviceSettingType = await this.selectDeviceSettingType();
 
     let credentials = '';
-    let deviceSettingsType = '';  // For log info
     switch (deviceSettingType) {
       case ConfigDeviceOptions.CRC:
         await this.generateCrc(this.channel);
@@ -171,32 +169,26 @@ export class AZ3166Device extends ArduinoDeviceBase {
         // Get device connection string
         credentials = await this.getDeviceConnectionString();
 
-        deviceSettingsType = 'device connection string';
         await this.logAndSetCredentials(
-            credentials, ConfigDeviceOptions.ConnectionString,
-            deviceSettingsType);
+            credentials, ConfigDeviceOptions.ConnectionString);
         return;
       case ConfigDeviceOptions.DPS:
         // Get DPS Credential
         credentials = await this.getDPSCredentialsFromInput();
 
-        deviceSettingsType = 'UPS credentials';
         await this.logAndSetCredentials(
-            credentials, ConfigDeviceOptions.ConnectionString,
-            deviceSettingsType);
+            credentials, ConfigDeviceOptions.ConnectionString);
         return;
       case ConfigDeviceOptions.UDS:
         // Get UDS string
         credentials = await this.getUDSStringFromInput();
 
-        deviceSettingsType = 'Unique Device String (UDS)';
         await this.logAndSetCredentials(
-            credentials, ConfigDeviceOptions.ConnectionString,
-            deviceSettingsType);
+            credentials, ConfigDeviceOptions.ConnectionString);
         return;
       default:
-        throw new Error(`Internal Error: Unsupported device setting type: ${
-            deviceSettingType}.`);
+        throw new TypeNotSupportedError(
+            'device setting type', `${deviceSettingType}`);
     }
   }
 
@@ -212,8 +204,8 @@ export class AZ3166Device extends ArduinoDeviceBase {
    * window
    */
   private async logAndSetCredentials(
-      credentials: string, deviceSettingType: ConfigDeviceOptions,
-      deviceSettingsType: string): Promise<void> {
+      credentials: string,
+      deviceSettingType: ConfigDeviceOptions): Promise<void> {
     // Log Credentials
     console.log(credentials);
 
@@ -221,17 +213,32 @@ export class AZ3166Device extends ArduinoDeviceBase {
     const res = await this.setDeviceConfig(
         credentials, deviceSettingType);  // TODO: Mind the return value.
     if (!res) {
-      throw new Error('Fail to flush configuration to device');
+      throw new OperationFailedError('flush configuration to device');
+    }
+    let deviceSettingTypeForLog;
+    switch (deviceSettingType) {
+      case ConfigDeviceOptions.ConnectionString:
+        deviceSettingTypeForLog = 'device connection string';
+        break;
+      case ConfigDeviceOptions.DPS:
+        deviceSettingTypeForLog = 'UPS credentials';
+        break;
+      case ConfigDeviceOptions.UDS:
+        deviceSettingTypeForLog = 'Unique Device String (UDS)';
+        break;
+      default:
+        throw new TypeNotSupportedError(
+            'device setting type', `${deviceSettingType}`);
     }
 
     vscode.window.showInformationMessage(
-        `Successfully configure ${deviceSettingsType}.`);
+        `Successfully configure ${deviceSettingTypeForLog}.`);
   }
 
   /**
    * Select device setting type.
    */
-  private async selectDeviceSettingType(): Promise<string|undefined> {
+  private async selectDeviceSettingType(): Promise<ConfigDeviceOptions> {
     const configSelectionItems = await this.getConfigDeviceSettingTypeOptions();
     const configSelection =
         await vscode.window.showQuickPick(configSelectionItems, {
@@ -241,11 +248,13 @@ export class AZ3166Device extends ArduinoDeviceBase {
           placeHolder: 'Select an option',
         });
     if (!configSelection) {
-      throw new CancelOperationError(
+      throw new OperationCanceledError(
           'Config device settings option selection cancelled.');
     }
 
-    return configSelection.detail;
+    const deviceSettingsType: ConfigDeviceOptions =
+        getEnumKeyByEnumValue(ConfigDeviceOptions, configSelection.label);
+    return deviceSettingsType;
   }
 
   /**
@@ -267,11 +276,8 @@ export class AZ3166Device extends ArduinoDeviceBase {
     const configSelectionItems: vscode.QuickPickItem[] = [];
     configSelectionItemsContent.configSelectionItems.forEach(
         (element: DeviceConfig) => {
-          configSelectionItems.push({
-            label: element.label,
-            description: element.description,
-            detail: element.detail
-          });
+          configSelectionItems.push(
+              {label: element.label, description: '', detail: element.detail});
         });
 
     return configSelectionItems;
@@ -297,7 +303,7 @@ export class AZ3166Device extends ArduinoDeviceBase {
     }
 
     if (!deviceConnectionString) {
-      throw new Error('Fail to get device connection string.');
+      throw new OperationFailedError('get device connection string');
     }
 
     return deviceConnectionString;
@@ -319,7 +325,7 @@ export class AZ3166Device extends ArduinoDeviceBase {
             {ignoreFocusOut: true, placeHolder: 'Choose an option:'});
 
     if (!deviceConnectionStringAcquisitionSelection) {
-      throw new CancelOperationError(
+      throw new OperationCanceledError(
           'Device connection string acquisition method selection cancelled.');
     }
 
@@ -379,7 +385,7 @@ export class AZ3166Device extends ArduinoDeviceBase {
       if (result === DialogResponses.yes) {
         opn(constants.informationPageUrl);
       }
-      throw new CancelOperationError(
+      throw new OperationCanceledError(
           'Fail to get input device connection string.');
     }
 
@@ -416,7 +422,7 @@ export class AZ3166Device extends ArduinoDeviceBase {
     const option = this.getDPSConnectionStringOptions();
     const dpsCredential = await vscode.window.showInputBox(option);
     if (!dpsCredential) {
-      throw new CancelOperationError('DPS credentials input cancelled.');
+      throw new OperationCanceledError('DPS credentials input cancelled.');
     }
     return dpsCredential;
   }
@@ -452,7 +458,7 @@ export class AZ3166Device extends ArduinoDeviceBase {
     const option = this.getUDSStringOptions();
     const UDS = await vscode.window.showInputBox(option);
     if (!UDS) {
-      throw new CancelOperationError('UDS string input cancelled.');
+      throw new OperationCanceledError('UDS string input cancelled.');
     }
 
     return UDS;
@@ -532,8 +538,7 @@ export class AZ3166Device extends ArduinoDeviceBase {
           const az3166 = this.board;
 
           if (!az3166) {
-            return reject(
-                new Error('IoT DevKit is not found in the board list.'));
+            return reject(new BoardNotFoundError(AZ3166Device._boardId));
           }
 
           const port = new AZ3166Device.serialport(comPort, {
@@ -634,8 +639,7 @@ export class AZ3166Device extends ArduinoDeviceBase {
           const az3166 = this.board;
 
           if (!az3166) {
-            return reject(
-                new Error('IoT DevKit is not found in the board list.'));
+            return reject(new BoardNotFoundError(AZ3166Device._boardId));
           }
 
           const port = new AZ3166Device.serialport(comPort, {
@@ -777,7 +781,7 @@ export class AZ3166Device extends ArduinoDeviceBase {
           const az3166 = this.board;
 
           if (!az3166) {
-            return reject(new Error('AZ3166 is not found in the board list.'));
+            return reject(new BoardNotFoundError(AZ3166Device._boardId));
           }
 
           const list = _.filter(comList, com => {
@@ -800,12 +804,16 @@ export class AZ3166Device extends ArduinoDeviceBase {
             }
 
             if (!comPort) {
-              reject(new Error('No avalible COM port.'));
+              reject(new ResourceNotFoundError(
+                  'choose COM', 'avaliable COM port.',
+                  'Please check COM port settings.'));
             }
 
             resolve(comPort);
           } else {
-            reject(new Error('No AZ3166 board connected.'));
+            reject(new ResourceNotFoundError(
+                'choose COM', 'connected AZ3166 board.',
+                'Please ensure AZ3166 board is successfully connected.'));
           }
         });
   }
@@ -872,8 +880,11 @@ export class AZ3166Device extends ArduinoDeviceBase {
     }
 
     if (!fs.existsSync(arduinoPackagePath)) {
-      throw new Error(
-          'Unable to locate Arduino IDE. Please install it from https://www.arduino.cc/en/main/software and use "Arduino: Board Manager" to install your device packages. Restart VS Code to apply to changes.');
+      const suggestedOperation =
+          'Please install it from https://www.arduino.cc/en/main/software and use "Arduino: Board Manager" to install your device packages. Restart VS Code to apply to changes.';
+      throw new ResourceNotFoundError(
+          `generate ${constants.platformLocalFileName} file`, 'Arduino IDE',
+          suggestedOperation);
     }
 
     const files = fs.readdirSync(arduinoPackagePath);
@@ -884,14 +895,18 @@ export class AZ3166Device extends ArduinoDeviceBase {
     }
 
     if (files.length === 0 || files.length > 1) {
-      throw new Error(
-          'There are unexpected files or folders under Arduino package installation path. Please clear the folder and reinstall the package for Devkit.');
+      throw new ResourceNotFoundError(
+          `generate ${constants.platformLocalFileName} file`,
+          `files under Arduino package installation path ${arduinoPackagePath}`,
+          'Please clear the path and reinstall the package for Devkit.');
     }
 
     const directoryName = path.join(arduinoPackagePath, files[0]);
     if (!fs.isDirectorySync(directoryName)) {
-      throw new Error(
-          'The Arduino package for MXChip IoT Devkit is not installed. Please follow the guide to install it');
+      throw new ResourceNotFoundError(
+          `generate ${constants.platformLocalFileName} file`,
+          'Arduino package for MXChip IoT Devkit',
+          'Please follow guide to install the DevKit package.');
     }
 
     const fileName = path.join(directoryName, constants.platformLocalFileName);

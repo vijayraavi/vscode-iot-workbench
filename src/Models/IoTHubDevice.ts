@@ -5,6 +5,7 @@ import * as iothub from 'azure-iothub';
 import {Guid} from 'guid-typescript';
 import * as vscode from 'vscode';
 
+import {ConfigNotFoundError, DependentExtensionNotFoundError} from '../common/Error/Error';
 import {ConfigHandler} from '../configHandler';
 import {ConfigKey, ScaffoldType} from '../constants';
 
@@ -40,9 +41,7 @@ export class IoTHubDevice implements Component, Provisionable {
     return true;
   }
 
-  async load(): Promise<boolean> {
-    return true;
-  }
+  async load(): Promise<void> {}
 
   async create(): Promise<void> {}
 
@@ -50,8 +49,8 @@ export class IoTHubDevice implements Component, Provisionable {
     const iotHubConnectionString =
         ConfigHandler.get<string>(ConfigKey.iotHubConnectionString);
     if (!iotHubConnectionString) {
-      throw new Error(
-          'Unable to find IoT Hub connection in the project. Please retry Azure Provision.');
+      throw new ConfigNotFoundError(
+          ConfigKey.iotHubConnectionString, 'Please retry Azure Provision.');
     }
 
     const selection = await vscode.window.showQuickPick(
@@ -64,8 +63,7 @@ export class IoTHubDevice implements Component, Provisionable {
 
     const toolkit = getExtension(ExtensionName.Toolkit);
     if (!toolkit) {
-      throw new Error(
-          'Azure IoT Hub Toolkit is not installed. Please install it from Marketplace.');
+      throw new DependentExtensionNotFoundError(ExtensionName.Toolkit);
     }
 
     let device = null;

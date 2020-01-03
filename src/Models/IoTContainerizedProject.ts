@@ -5,8 +5,8 @@ import * as fs from 'fs-plus';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-import {CancelOperationError} from '../common/CancelOperationError';
 import {RemoteContainersCommands, VscodeCommands} from '../common/Commands';
+import {AugumentEmptyOrNullError, OperationCanceledError, OperationFailedError, PrerequisiteNotMetError, ResourceNotFoundError, TypeNotSupportedError} from '../common/Error/Error';
 import {ConfigKey, EventNames, FileNames, ScaffoldType} from '../constants';
 import {FileUtility} from '../FileUtility';
 import {TelemetryContext, TelemetryWorker} from '../telemetry';
@@ -29,8 +29,7 @@ export class IoTContainerizedProject extends IoTWorkbenchProjectBase {
     super(context, channel, telemetryContext);
     this.projectHostType = ProjectHostType.Container;
     if (!rootFolderPath) {
-      throw new Error(
-          `Fail to construct iot workspace project: root folder path is empty.`);
+      throw new AugumentEmptyOrNullError('root folder path');
     }
     this.projectRootPath = rootFolderPath;
     this.iotWorkbenchProjectFilePath =
@@ -56,8 +55,9 @@ export class IoTContainerizedProject extends IoTWorkbenchProjectBase {
         await getProjectConfig(scaffoldType, this.iotWorkbenchProjectFilePath);
     const boardId = projectConfigJson[`${ConfigKey.boardId}`];
     if (!boardId) {
-      throw new Error(
-          `Internal Error: Fail to get board id from configuration.`);
+      throw new OperationFailedError(
+          `get board id from iot workbench project configuration file ${
+              this.iotWorkbenchProjectFilePath}`);
     }
     await this.initDevice(boardId, scaffoldType);
   }
@@ -91,8 +91,8 @@ export class IoTContainerizedProject extends IoTWorkbenchProjectBase {
 
     // Update workspace config to workspace config file
     if (!this.iotWorkbenchProjectFilePath) {
-      throw new Error(
-          `Workspace config file path is empty. Please initialize the project first.`);
+      throw new AugumentEmptyOrNullError(
+          'iot workbench project file', 'Please initialize the project first.');
     }
     await FileUtility.writeJsonFile(
         createTimeScaffoldType, this.iotWorkbenchProjectFilePath,
@@ -102,8 +102,7 @@ export class IoTContainerizedProject extends IoTWorkbenchProjectBase {
     this.componentList.forEach(async item => {
       const res = await item.checkPrerequisites();
       if (!res) {
-        throw new Error(
-            `Failed to create component because prerequisite is not met.`);
+        throw new PrerequisiteNotMetError('create component');
       }
     });
 
@@ -165,8 +164,8 @@ export class IoTContainerizedProject extends IoTWorkbenchProjectBase {
 
   private async openFolderInContainer(folderPath: string) {
     if (!await FileUtility.directoryExists(ScaffoldType.Local, folderPath)) {
-      throw new Error(
-          `Fail to open folder in container: ${folderPath} does not exist.`);
+      throw new ResourceNotFoundError(
+          'open folder in container', `folder path ${folderPath}`);
     }
 
     await RemoteExtension.checkRemoteExtension();
@@ -193,7 +192,7 @@ export class IoTContainerizedProject extends IoTWorkbenchProjectBase {
           this.extensionContext, this.projectRootPath, this.channel,
           this.telemetryContext, templateFilesInfo);
     } else {
-      throw new Error(`The board ${boardId} is not supported.`);
+      throw new TypeNotSupportedError('board type', boardId);
     }
 
     if (device) {
@@ -225,7 +224,7 @@ export class IoTContainerizedProject extends IoTWorkbenchProjectBase {
         });
 
     if (!openInContainerSelection) {
-      throw new CancelOperationError(
+      throw new OperationCanceledError(
           `Ask to customize development environment selection cancelled.`);
     }
 

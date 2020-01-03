@@ -4,7 +4,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-import {CancelOperationError} from './common/CancelOperationError';
+import {OperationCanceledError} from './common/Error/Error';
 import {ConfigHandler} from './configHandler';
 import {ConfigKey, OSPlatform} from './constants';
 import {PickWithData} from './Models/Interfaces/UI';
@@ -86,7 +86,7 @@ export class IoTWorkbenchSettings {
     });
 
     if (!selection) {
-      throw new CancelOperationError('Workbench path selection cancelled.');
+      throw new OperationCanceledError('Workbench path selection cancelled.');
     }
     return selection;
   }
@@ -101,7 +101,7 @@ export class IoTWorkbenchSettings {
 
     const folderUri = await vscode.window.showOpenDialog(options);
     if (!folderUri || folderUri.length === 0) {
-      throw new CancelOperationError('Folder selection cancelled.');
+      throw new OperationCanceledError('Folder selection cancelled.');
     }
 
     return folderUri[0].fsPath;

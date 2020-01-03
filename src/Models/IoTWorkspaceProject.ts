@@ -6,6 +6,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 import {IoTCubeCommands} from '../common/Commands';
+import {AugumentEmptyOrNullError, ConfigNotFoundError, OperationFailedError, ResourceNotFoundError, TypeNotSupportedError} from '../common/Error/Error';
 import {ConfigHandler} from '../configHandler';
 import {ConfigKey, EventNames, FileNames, ScaffoldType} from '../constants';
 import {FileUtility} from '../FileUtility';
@@ -53,8 +54,7 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
     super(context, channel, telemetryContext);
     this.projectHostType = ProjectHostType.Workspace;
     if (!rootFolderPath) {
-      throw new Error(
-          `Fail to construct iot workspace project: root folder path is empty.`);
+      throw new AugumentEmptyOrNullError('root folder path');
     }
     this.projectRootPath = rootFolderPath;
     this.telemetryContext.properties.projectHostType = this.projectHostType;
@@ -66,13 +66,14 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
     // Init device root path
     const devicePath = ConfigHandler.get<string>(ConfigKey.devicePath);
     if (!devicePath) {
-      throw new Error(
-          `Internal Error: Fail to get device path from configuration.`);
+      throw new ConfigNotFoundError(ConfigKey.devicePath);
     }
     this.deviceRootPath = path.join(this.projectRootPath, devicePath);
     if (!await FileUtility.directoryExists(scaffoldType, this.deviceRootPath)) {
-      throw new Error(
-          `Device root path ${this.deviceRootPath} does not exist.`);
+      throw new ResourceNotFoundError(
+          'load iot workspace project',
+          `device root path ${this.deviceRootPath}`,
+          'Please initialize the project first.');
     }
 
     // Init and update iot workbench project file
@@ -92,8 +93,7 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
 
     const boardId = ConfigHandler.get<string>(ConfigKey.boardId);
     if (!boardId) {
-      throw new Error(
-          `Internal Error: Fail to get board id from configuration.`);
+      throw new ConfigNotFoundError(ConfigKey.boardId);
     }
     await this.initDevice(boardId, scaffoldType);
 
@@ -147,8 +147,9 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
 
     // Update workspace config to workspace config file
     if (!this.workspaceConfigFilePath) {
-      throw new Error(
-          `Workspace config file path is empty. Please initialize the project first.`);
+      throw new AugumentEmptyOrNullError(
+          'workspace configuration file path',
+          'Please initialize the project first.');
     }
     await FileUtility.writeJsonFile(
         createTimeScaffoldType, this.workspaceConfigFilePath, workspace);
@@ -183,8 +184,10 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
 
     if (!await FileUtility.fileExists(
             scaffoldType, this.workspaceConfigFilePath)) {
-      throw new Error(`Workspace config file ${
-          this.workspaceConfigFilePath} does not exist. Please initialize the project first.`);
+      throw new ResourceNotFoundError(
+          'open project',
+          `workspace configuration file ${this.workspaceConfigFilePath}`,
+          'Please initialize the project first.`');
     }
 
     if (!openInNewWindow) {
@@ -218,8 +221,9 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
       boardId: string, scaffoldType: ScaffoldType,
       templateFilesInfo?: TemplateFileInfo[]) {
     if (!await FileUtility.directoryExists(scaffoldType, this.deviceRootPath)) {
-      throw new Error(`Device root path ${
-          this.deviceRootPath} does not exist. Please initialize the project first.`);
+      throw new ResourceNotFoundError(
+          'initialize device', `device root path: ${this.deviceRootPath}`,
+          'Please initialize the project first.');
     }
 
     let device: Component;
@@ -235,7 +239,7 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
           this.extensionContext, this.channel, this.telemetryContext,
           this.deviceRootPath, templateFilesInfo);
     } else {
-      throw new Error(`The board ${boardId} is not supported.`);
+      throw new TypeNotSupportedError('board type', boardId);
     }
 
     if (device) {
@@ -307,8 +311,7 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
           const functionPath =
               ConfigHandler.get<string>(ConfigKey.functionPath);
           if (!functionPath) {
-            throw new Error(
-                `Internal Error: Fail to get function path from configuration.`);
+            throw new ConfigNotFoundError(ConfigKey.functionPath);
           }
 
           const functionLocation =
@@ -323,14 +326,8 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
           break;
         }
         case ComponentType.StreamAnalyticsJob: {
-          const dependencies: Dependency[] = [];
-          for (const dependent of componentConfig.dependencies) {
-            const component = components[dependent.id];
-            if (!component) {
-              throw new Error(`Cannot find component with id ${dependent}.`);
-            }
-            dependencies.push({component, type: dependent.type});
-          }
+          const dependencies =
+              this.extractComponentDependencies(componentConfig, components);
           const queryPath = path.join(
               this.projectRootPath, folderName.asaFolderName, 'query.asaql');
           const asa = new streamAnalyticsJobModule.StreamAnalyticsJob(
@@ -342,14 +339,8 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
           break;
         }
         case ComponentType.CosmosDB: {
-          const dependencies: Dependency[] = [];
-          for (const dependent of componentConfig.dependencies) {
-            const component = components[dependent.id];
-            if (!component) {
-              throw new Error(`Cannot find component with id ${dependent}.`);
-            }
-            dependencies.push({component, type: dependent.type});
-          }
+          const dependencies =
+              this.extractComponentDependencies(componentConfig, components);
           const cosmosDB = new cosmosDBModule.CosmosDB(
               this.extensionContext, this.projectRootPath, this.channel,
               dependencies);
@@ -359,8 +350,8 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
           break;
         }
         default: {
-          throw new Error(
-              `Component not supported with type of ${componentConfig.type}.`);
+          throw new TypeNotSupportedError(
+              'component type', `${componentConfig.type}`);
         }
       }
     }
@@ -488,13 +479,26 @@ export class IoTWorkspaceProject extends IoTWorkbenchProjectBase {
     this.validateProjectRootPath(scaffoldType);
 
     const workspaceFile = getWorkspaceFile(this.projectRootPath);
-    if (workspaceFile) {
-      this.workspaceConfigFilePath =
-          path.join(this.projectRootPath, workspaceFile);
-    } else {
-      throw new Error(
-          `Fail to init iot project workspace file path: Cannot find workspace file under project root path: ${
-              this.projectRootPath}.`);
+    if (!workspaceFile) {
+      throw new ResourceNotFoundError(
+          'init iot project workspace file path',
+          `workspace file under project root path: ${this.projectRootPath}.`);
     }
+    this.workspaceConfigFilePath =
+        path.join(this.projectRootPath, workspaceFile);
+  }
+
+  private extractComponentDependencies(
+      componentConfig: AzureComponentConfig,
+      components: {[key: string]: Component}): Dependency[] {
+    const dependencies: Dependency[] = [];
+    for (const dependent of componentConfig.dependencies) {
+      const component = components[dependent.id];
+      if (!component) {
+        throw new OperationFailedError(`find component with id ${dependent}`);
+      }
+      dependencies.push({component, type: dependent.type});
+    }
+    return dependencies;
   }
 }
